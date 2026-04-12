@@ -15,6 +15,14 @@ import jsPDF from 'jspdf';
 import { signOutWithRefresh } from '@/lib/signout';
 import ProductStoryCards from '@/components/ProductStoryCards';
 
+// Helper to get API URL - uses NEXT_PUBLIC_API_URL for local dev, relative paths for Vercel
+const getApiUrl = (endpoint: string): string => {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return `${process.env.NEXT_PUBLIC_API_URL}${endpoint}`;
+  }
+  return endpoint; // Use relative path for Vercel
+};
+
 export default function Home() {
   const [session, setSession] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -126,7 +134,7 @@ const openAuth = (mode: 'login' | 'signup') => {
     formData.append('file', file);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/upload-lease`, {
+      const response = await fetch(getApiUrl('/api/upload-lease'), {
         method: 'POST',
         body: formData,
       });
