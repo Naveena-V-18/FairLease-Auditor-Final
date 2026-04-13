@@ -16,6 +16,10 @@ import { signOutWithRefresh } from '@/lib/signout';
 import ProductStoryCards from '@/components/ProductStoryCards';
 
 export default function Home() {
+  useEffect(() => {
+    document.title = 'Home | FairLease Auditor';
+  }, []);
+
   const [session, setSession] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
