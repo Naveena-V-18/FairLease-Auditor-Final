@@ -134,6 +134,20 @@ const openAuth = (mode: 'login' | 'signup') => {
       
       const data = await response.json();
 
+      if (!response.ok) {
+        setResult({
+          detected_as: "Backend Error",
+          explanation: data?.message || data?.error || "The audit service failed to respond correctly.",
+          analysis: data?.trace || data?.errors?.join("\n") || data?.message || "No backend details were returned.",
+          risks: [],
+          summary: {},
+          score: 0,
+          verdict: "ERROR",
+        });
+        setStatus('error');
+        return;
+      }
+
       if (data.status === 'rejected' || data.status === 'invalid') {
         setResult({
           rejection_reason: data.rejection_reason,
@@ -171,6 +185,15 @@ const auditResults = {
 
       setStatus('success');
     } catch (error) {
+      setResult({
+        detected_as: "Network Error",
+        explanation: error instanceof Error ? error.message : "The upload request failed before the backend responded.",
+        analysis: error instanceof Error ? error.stack || error.message : "No error details available.",
+        risks: [],
+        summary: {},
+        score: 0,
+        verdict: "ERROR",
+      });
       setStatus('error');
     }
   };
@@ -621,6 +644,24 @@ const auditResults = {
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {status === 'error' && result && (
+              <div className="max-w-3xl mx-auto py-20 animate-in fade-in zoom-in duration-500">
+                <div className="bg-white border border-amber-200 rounded-[2.5rem] p-10 shadow-xl shadow-amber-50/50">
+                  <div className="flex items-center gap-3 mb-6">
+                    <AlertCircle className="w-6 h-6 text-amber-500" />
+                    <h2 className="text-2xl font-black text-slate-900">Audit Service Error</h2>
+                  </div>
+                  <p className="text-sm text-slate-600 mb-4">{result.explanation || "The audit request failed."}</p>
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs text-slate-700 whitespace-pre-wrap">
+                    {result.analysis || "No additional error details available."}
+                  </div>
+                  <button onClick={() => { setStatus('idle'); setResult(null); setFile(null); }} className="mt-6 w-full bg-slate-900 text-white py-4 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-slate-800 transition-all">
+                    Try Again
+                  </button>
                 </div>
               </div>
             )}
