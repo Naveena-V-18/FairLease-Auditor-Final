@@ -279,7 +279,7 @@ export async function POST(request: Request) {
     );
 
     // 3. Send the email
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: `"FairLease Auditor" <${senderEmail}>`,
       to: email,
       subject: `Your Lease Audit Results: ${verdict} (${score}%)`,
@@ -294,7 +294,29 @@ export async function POST(request: Request) {
       ],
     });
 
-    return NextResponse.json({ success: true });
+    const accepted = Array.isArray(info.accepted) ? info.accepted.map(String) : [];
+    const rejected = Array.isArray(info.rejected) ? info.rejected.map(String) : [];
+
+    if (accepted.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'SMTP did not accept recipient',
+          accepted,
+          rejected,
+          envelope: info.envelope,
+        },
+        { status: 502 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      accepted,
+      rejected,
+      messageId: info.messageId,
+      envelope: info.envelope,
+    });
   } catch (error) {
     console.error("Gmail Send Error:", error);
     if ((error as Error).message === 'Invalid JSON payload') {

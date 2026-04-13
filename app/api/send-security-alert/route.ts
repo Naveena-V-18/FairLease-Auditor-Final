@@ -34,8 +34,31 @@ export async function POST(req: Request) {
       text: 'Your FairLease Auditor password was successfully updated.',
     };
 
-    await transporter.sendMail(mailOptions);
-    return NextResponse.json({ success: true, message: 'Security alert dispatched' });
+    const info = await transporter.sendMail(mailOptions);
+    const accepted = Array.isArray(info.accepted) ? info.accepted.map(String) : [];
+    const rejected = Array.isArray(info.rejected) ? info.rejected.map(String) : [];
+
+    if (accepted.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'SMTP did not accept recipient',
+          accepted,
+          rejected,
+          envelope: info.envelope,
+        },
+        { status: 502 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Security alert dispatched',
+      accepted,
+      rejected,
+      messageId: info.messageId,
+      envelope: info.envelope,
+    });
   } catch (error: any) {
     console.error('Nodemailer Error:', error.message);
     if (error.message === 'Invalid JSON payload') {

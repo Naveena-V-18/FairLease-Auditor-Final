@@ -207,7 +207,7 @@ export async function POST(request: Request) {
       ? messageText.trim()
       : `Welcome to FairLease Auditor, ${userName || 'User'}! Start your first audit at ${baseUrl}`;
 
-    await Promise.all(
+    const sendInfos = await Promise.all(
       recipients.map((recipient) =>
         transporter.sendMail({
           from: `"FairLease Auditor" <${senderEmail}>`,
@@ -219,12 +219,30 @@ export async function POST(request: Request) {
       )
     );
 
+    const accepted = sendInfos.flatMap((info) => (Array.isArray(info.accepted) ? info.accepted.map(String) : []));
+    const rejected = sendInfos.flatMap((info) => (Array.isArray(info.rejected) ? info.rejected.map(String) : []));
+
+    if (accepted.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'SMTP did not accept any recipients',
+          accepted,
+          rejected,
+        },
+        { status: 502 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
-      sentCount: recipients.length,
-      message: recipients.length === 1
+      sentCount: accepted.length,
+      rejectedCount: rejected.length,
+      accepted,
+      rejected,
+      message: accepted.length === 1
         ? 'Mail sent to user successfully'
-        : `Mail sent to ${recipients.length} users successfully`,
+        : `Mail sent to ${accepted.length} users successfully`,
     });
   } catch (error) {
     console.error("Welcome Email Error:", error);
