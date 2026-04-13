@@ -27,8 +27,14 @@ export default function Home() {
   const [status, setStatus] = useState<'idle' | 'processing' | 'success' | 'rejected' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState("");
   const [result, setResult] = useState<any>(null);
+  const [emailToast, setEmailToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const showEmailToast = (type: 'success' | 'error', message: string) => {
+    setEmailToast({ type, message });
+    window.setTimeout(() => setEmailToast(null), 4500);
+  };
  
 
   useEffect(() => {
@@ -71,6 +77,7 @@ const openAuth = (mode: 'login' | 'signup') => {
       setFile(acceptedFiles[0]);
       setStatus('idle');
       setResult(null);
+      setEmailToast(null);
     });
   };
 
@@ -81,7 +88,10 @@ const openAuth = (mode: 'login' | 'signup') => {
     noClick: !session 
   });
   const sendAuditEmail = async (analysisData: any, sourceFileName: string) => {
-    if (!session?.user?.email) return;
+    if (!session?.user?.email) {
+      showEmailToast('error', 'Audit completed, but email failed: user email not found.');
+      return;
+    }
 
     try {
       // Extract a simple name from email (e.g., 'naveen' from 'naveen@gmail.com')
@@ -103,19 +113,25 @@ const openAuth = (mode: 'login' | 'signup') => {
 
       if (!emailResponse.ok) {
         const payload = await emailResponse.json().catch(() => ({}));
-        console.error(payload?.error || `Audit mail failed with status ${emailResponse.status}`);
+        const message = payload?.error || `Audit mail failed with status ${emailResponse.status}`;
+        console.error(message);
+        showEmailToast('error', `Audit email failed: ${message}`);
         return;
       }
 
       const payload = await emailResponse.json().catch(() => ({}));
       if (payload?.success === false) {
-        console.error(payload?.error || 'Audit mail dispatch failed');
+        const message = payload?.error || 'Audit mail dispatch failed';
+        console.error(message);
+        showEmailToast('error', `Audit email failed: ${message}`);
         return;
       }
 
+      showEmailToast('success', `Audit email sent to ${session.user.email}`);
       console.log("Audit result email sent to user.");
     } catch (error) {
       console.error("Failed to trigger audit email:", error);
+      showEmailToast('error', `Audit email failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -345,6 +361,20 @@ const auditResults = {
 
   return (
     <main className="min-h-screen bg-[#FDFDFD] text-slate-900 font-sans antialiased relative flex flex-col">
+{emailToast && (
+  <div className="fixed right-4 top-24 z-[120] max-w-md animate-in fade-in slide-in-from-top-2 duration-300">
+    <div className={`rounded-2xl border px-4 py-3 shadow-lg backdrop-blur-sm ${
+      emailToast.type === 'success'
+        ? 'bg-emerald-50/95 border-emerald-200 text-emerald-800'
+        : 'bg-red-50/95 border-red-200 text-red-800'
+    }`}>
+      <p className="text-xs font-bold uppercase tracking-wider mb-1">
+        {emailToast.type === 'success' ? 'Mail Status' : 'Mail Error'}
+      </p>
+      <p className="text-sm font-semibold leading-snug">{emailToast.message}</p>
+    </div>
+  </div>
+)}
  {/* AUTH MODAL OVERLAY */}
 {showAuthModal && (
   <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
