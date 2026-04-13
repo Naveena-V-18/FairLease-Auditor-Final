@@ -35,8 +35,20 @@ function cleanInlineMarkdown(text: string) {
     .trim();
 }
 
+function sanitizePdfText(text: string) {
+  return text
+    .replace(/₹/g, 'Rs.')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/…/g, '...')
+    .replace(/[–—]/g, '-')
+    // Keep printable ASCII plus newlines/tabs to avoid WinAnsi encode errors.
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, '');
+}
+
 function splitWrappedLines(text: string, maxWidth: number, size: number, widthOf: (s: string, sz: number) => number) {
-  const words = text.split(/\s+/).filter(Boolean);
+  const safeText = sanitizePdfText(text);
+  const words = safeText.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let current = '';
 
@@ -93,8 +105,9 @@ async function generateAuditPdf(payload: AuditPayload) {
     const isBold = options?.isBold ?? false;
     const colorTuple = options?.color ?? [0.2, 0.23, 0.28];
 
+    const safeText = sanitizePdfText(text);
     ensureSpace(lineHeight);
-    page.drawText(text, {
+    page.drawText(safeText, {
       x,
       y,
       size,
@@ -153,7 +166,7 @@ async function generateAuditPdf(payload: AuditPayload) {
   drawLine('Detailed Analysis', { size: 14, lineHeight: 20, isBold: true, color: [0.08, 0.14, 0.24] });
   y -= 2;
 
-  const analysis = payload.analysis || 'No analysis provided.';
+  const analysis = sanitizePdfText(payload.analysis || 'No analysis provided.');
   const normalized = analysis
     .replace(/\r/g, '')
     .replace(/\t/g, ' ')
