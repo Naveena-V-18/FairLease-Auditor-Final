@@ -2,9 +2,6 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { render } from '@react-email/render';
 import AuditResultEmail from '@/emails/AuditResultEmail';
-import { mkdir, writeFile } from 'node:fs/promises';
-import path from 'node:path';
-import { randomUUID } from 'node:crypto';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { createMailTransporter } from '@/lib/mailer';
 
@@ -26,10 +23,6 @@ async function readJsonBody(request: Request) {
   } catch {
     throw new Error('Invalid JSON payload');
   }
-}
-
-function sanitizeFileName(name: string) {
-  return name.replace(/[^a-zA-Z0-9-_]/g, '_');
 }
 
 function cleanInlineMarkdown(text: string) {
@@ -267,18 +260,10 @@ export async function POST(request: Request) {
     };
 
     const pdfBytes = await generateAuditPdf(validatedPayload);
-    const reportsDir = path.join(process.cwd(), 'public', 'reports');
-    await mkdir(reportsDir, { recursive: true });
-
-    const reportFileName = `audit-${Date.now()}-${randomUUID().slice(0, 8)}-${sanitizeFileName(
-      payload.fileName ?? 'lease'
-    )}.pdf`;
-    const reportFilePath = path.join(reportsDir, reportFileName);
-    await writeFile(reportFilePath, pdfBytes);
 
     const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? 'localhost:3000';
     const protocol = request.headers.get('x-forwarded-proto') ?? 'http';
-    const reportUrl = `${protocol}://${host}/api/download-audit?file=${encodeURIComponent(reportFileName)}`;
+    const reportUrl = `${protocol}://${host}/history`;
 
     const { senderEmail, transporter } = createMailTransporter();
 

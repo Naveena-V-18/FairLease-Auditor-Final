@@ -43,11 +43,11 @@ export const AuditResultEmail = ({
         </Section>
         <Text style={text}>
           We have generated a detailed PDF report including predatory clause detection 
-          and suggested negotiation scripts.
+          and suggested negotiation scripts. The full report is attached to this email.
         </Text>
         <Section style={btnContainer}>
           <Link href={reportUrl} style={button}>
-            Download Full Audit PDF
+            View Audit History
           </Link>
         </Section>
         <Hr style={hr} />
