@@ -126,6 +126,7 @@ const openAuth = (mode: 'login' | 'signup') => {
     formData.append('file', file);
 
     try {
+      console.log("FETCHING FROM:", "/api/upload-lease");
       const response = await fetch('/api/upload-lease', {
         method: 'POST',
         body: formData,
@@ -637,4 +638,4 @@ const auditResults = {
       </footer>
     </main>
   );
-}
+}// Force update April 13 
