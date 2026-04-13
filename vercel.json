@@ -1,6 +1,6 @@
 {
   "buildCommand": "npm run build",
-  "installCommand": "npm install && cd api && pip install -r requirements.txt",
+  "installCommand": "npm install && cd api && pip install --upgrade pip && pip install -r requirements.txt",
   "framework": "nextjs",
   "routes": [
     {
