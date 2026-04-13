@@ -158,14 +158,7 @@ Application-level CRUD currently implemented:
 - Read: load user audit history
 - Delete: remove specific audit history item
 
-## Demo Readiness Guide
 
-For live presentation, be ready to explain:
-
-- Architecture: Next.js frontend + FastAPI AI backend + Supabase + SMTP mailer
-- AI component: prompt design, model failover, and rejection logic
-- Error handling: backend and UI fallback behavior
-- Deployment: Vercel production pipeline
 
 ## Known Notes
 
@@ -176,6 +169,4 @@ For live presentation, be ready to explain:
 
 - Naveena V
 
-## License
 
-For academic/internal project evaluation.
