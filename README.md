@@ -158,6 +158,9 @@ Application-level CRUD currently implemented:
 - Read: load user audit history
 - Delete: remove specific audit history item
 
+Try uploading some sample lease agreements to get your results:
+click here : https://drive.google.com/drive/folders/1AHlovC2LAGjcp-A0t97MN3_hQxmT2jeD?usp=sharing
+
 
 
 ## Known Notes
