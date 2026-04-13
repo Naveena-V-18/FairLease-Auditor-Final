@@ -17,9 +17,9 @@ FairLease Auditor allows users to upload lease PDFs and receive:
 
 - Deployment: https://fair-lease-auditor-final.vercel.app
 - GitHub: https://github.com/Naveena-V-18/FairLease-Auditor-Final
-- Demo Video: Add your video link here
-- Poster: Add your poster link here
-- Documentation: Add your documentation link here
+- Demo Video: https://drive.google.com/drive/folders/1LltORUk1TXroGlGK-nnkuBa7lSKBK-g1
+- Poster: https://drive.google.com/file/d/1QhJqQb6Okhdj2gFThlOF6nsnCJSLd64K/view
+- Documentation: https://drive.google.com/drive/folders/1EimOQx6CHBY3RRFiq9Ge74h5TiJz7dWI?usp=sharing
 
 ## Tech Stack
 
