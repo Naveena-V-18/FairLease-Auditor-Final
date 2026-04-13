@@ -15,12 +15,12 @@ import jsPDF from 'jspdf';
 import { signOutWithRefresh } from '@/lib/signout';
 import ProductStoryCards from '@/components/ProductStoryCards';
 
-// Helper to get API URL - uses NEXT_PUBLIC_API_URL for local dev, relative paths for Vercel
+// Helper to get API URL - uses NEXT_PUBLIC_API_URL only in local development
 const getApiUrl = (endpoint: string): string => {
-  if (process.env.NEXT_PUBLIC_API_URL) {
+  if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_API_URL) {
     return `${process.env.NEXT_PUBLIC_API_URL}${endpoint}`;
   }
-  return endpoint; // Use relative path for Vercel
+  return endpoint;
 };
 
 export default function Home() {

@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import traceback
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -10,9 +11,15 @@ from openai import OpenAI
 load_dotenv()
 
 # --- INITIALIZATION ---
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
+    api_key=OPENROUTER_API_KEY,
+    default_headers={
+        "HTTP-Referer": os.getenv("OPENROUTER_HTTP_REFERER", "http://localhost:3000"),
+        "X-Title": os.getenv("OPENROUTER_APP_TITLE", "FairLease Auditor"),
+    },
 )
 
 app = FastAPI()
@@ -52,7 +59,14 @@ def pre_validate_text(text: str):
 # ⚖️ TIER 2 & 3: AI CLASSIFICATION & AUDIT
 # ==========================================
 def run_ats_logic_with_failover(text):
-    models = ["google/gemini-2.0-flash-001", "meta-llama/llama-3.1-8b-instruct"]
+    if not OPENROUTER_API_KEY:
+        return {
+            "status": "error",
+            "message": "OPENROUTER_API_KEY is missing.",
+            "errors": ["OPENROUTER_API_KEY environment variable is not set."],
+        }
+
+    models = ["google/gemini-2.0-flash-001", "meta-llama/llama-3.3-70b-instruct"]
 
     prompt = f"""
     Act as a Senior Legal Auditor. Your job is to classify and audit the document.
@@ -89,6 +103,8 @@ def run_ats_logic_with_failover(text):
     }}
     """
 
+    errors = []
+
     for model_id in models:
         try:
             response = client.chat.completions.create(
@@ -97,10 +113,32 @@ def run_ats_logic_with_failover(text):
                 response_format={ "type": "json_object" },
                 timeout=40
             )
-            return json.loads(response.choices[0].message.content)
-        except Exception:
+            content = response.choices[0].message.content or ""
+            try:
+                parsed = json.loads(content)
+                return {
+                    "status": "success",
+                    "model": model_id,
+                    "data": parsed,
+                }
+            except json.JSONDecodeError as parse_error:
+                preview = content[:1000]
+                error_message = f"{model_id}: invalid JSON returned by OpenRouter ({parse_error}). Preview: {preview}"
+                errors.append(error_message)
+                print(error_message)
+                continue
+        except Exception as exc:
+            error_message = f"{model_id}: {type(exc).__name__}: {exc}"
+            errors.append(error_message)
+            print(error_message)
+            traceback.print_exc()
             continue 
-    return None
+
+    return {
+        "status": "error",
+        "message": "OpenRouter request failed for all configured models.",
+        "errors": errors,
+    }
 
 # ==========================================
 # 🚀 API ENDPOINT
@@ -134,36 +172,45 @@ async def upload_lease(file: UploadFile = File(...)):
         # 🟢 STAGE 2: AI REASONING
         result = run_ats_logic_with_failover(text)
 
-        if not result:
-            return {"status": "error", "message": "The engine is currently unavailable."}
+        if result.get("status") == "error":
+            return result
+
+        result_data = result.get("data") or {}
 
         # 🟢 STAGE 3: SMART REJECTION HANDLING
-        if result["document_status"] != "valid":
-            reason = result.get("rejection_reason", "This document was not recognized as a valid lease.")
-            detected = result.get("detected_as", "Unknown")
+        if result_data.get("document_status") != "valid":
+            reason = result_data.get("rejection_reason", "This document was not recognized as a valid lease.")
+            detected = result_data.get("detected_as", "Unknown")
             
             return {
                 "status": "rejected",
-                "verdict": result["document_status"].upper(),
+                "verdict": str(result_data.get("document_status", "rejected")).upper(),
                 "detected_as": detected,
                 "rejection_reason": reason,
                 "explanation": f"## ❌ Audit Blocked\nWe identified this as a **{detected}**. {reason}"
             }
 
         # 🟢 STAGE 4: SUCCESSFUL AUDIT
+        audit_data = result_data.get("audit", {})
         return {
             "status": "success",
-            "detected_as": result.get("detected_as"),
-            "score": result["audit"].get("score", 0),
-            "verdict": result["audit"].get("verdict", "UNKNOWN"),
-            "theme": result["audit"].get("color", "#4CAF50"),
-            "risks": result["audit"].get("risks", []),
-            "summary": result["extracted_data"],
-            "explanation": result["explanation"]
+            "model": result.get("model"),
+            "detected_as": result_data.get("detected_as"),
+            "score": audit_data.get("score", 0),
+            "verdict": audit_data.get("verdict", "UNKNOWN"),
+            "theme": audit_data.get("color", "#4CAF50"),
+            "risks": audit_data.get("risks", []),
+            "summary": result_data.get("extracted_data", {}),
+            "explanation": result_data.get("explanation", "")
         }
 
     except Exception as e:
-        return {"status": "error", "message": f"Server Error: {str(e)}"}
+        traceback.print_exc()
+        return {
+            "status": "error",
+            "message": f"Server Error: {str(e)}",
+            "trace": traceback.format_exc(),
+        }
 
 if __name__ == "__main__":
     import uvicorn
