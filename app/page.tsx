@@ -88,7 +88,7 @@ const openAuth = (mode: 'login' | 'signup') => {
       const extractedName = session.user.email.split('@')[0];
       const capitalizedName = extractedName.charAt(0).toUpperCase() + extractedName.slice(1);
 
-      await fetch('/api/send-audit', {
+      const emailResponse = await fetch('/api/send-audit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -100,6 +100,19 @@ const openAuth = (mode: 'login' | 'signup') => {
           fileName: sourceFileName,
         }),
       });
+
+      if (!emailResponse.ok) {
+        const payload = await emailResponse.json().catch(() => ({}));
+        console.error(payload?.error || `Audit mail failed with status ${emailResponse.status}`);
+        return;
+      }
+
+      const payload = await emailResponse.json().catch(() => ({}));
+      if (payload?.success === false) {
+        console.error(payload?.error || 'Audit mail dispatch failed');
+        return;
+      }
+
       console.log("Audit result email sent to user.");
     } catch (error) {
       console.error("Failed to trigger audit email:", error);
@@ -179,9 +192,7 @@ const auditResults = {
         user_id: session.user.id
       }]);
 
-      // --- NEW: TRIGGER THE EMAIL ---
       await sendAuditEmail(auditResults, file.name);
-      // ------------------------------
 
       setStatus('success');
     } catch (error) {

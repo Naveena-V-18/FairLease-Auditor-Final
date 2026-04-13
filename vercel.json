@@ -4,7 +4,7 @@
   "framework": "nextjs",
   "routes": [
     {
-      "src": "/api/(.*)",
+      "src": "/api/upload-lease",
       "dest": "/api/main.py"
     },
     {
