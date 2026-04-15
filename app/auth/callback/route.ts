@@ -38,7 +38,40 @@ export async function GET(request: Request) {
     
     if (!error) {
       const { data: userData } = await supabase.auth.getUser()
-      const role = userData.user?.user_metadata?.role
+      const user = userData.user
+      const role = user?.user_metadata?.role
+
+      // Google OAuth path does not pass through the signup form handler,
+      // so we trigger welcome email once on first successful Google login.
+      const provider = user?.app_metadata?.provider
+      const welcomeSent = Boolean(user?.user_metadata?.google_welcome_sent)
+      const userEmail = user?.email
+
+      if (provider === 'google' && userEmail && !welcomeSent) {
+        try {
+          const extractedName = userEmail.split('@')[0] || 'User'
+          const capitalizedName = extractedName.charAt(0).toUpperCase() + extractedName.slice(1)
+
+          await fetch(`${origin}/api/send-welcome`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: userEmail,
+              userName: capitalizedName,
+            }),
+          })
+
+          await supabase.auth.updateUser({
+            data: {
+              ...user?.user_metadata,
+              google_welcome_sent: true,
+            },
+          })
+        } catch (welcomeError) {
+          console.error('GOOGLE_WELCOME_MAIL_ERROR:', (welcomeError as Error).message)
+        }
+      }
+
       const targetPath = role === 'admin' ? '/admin' : safeNext
       const forwardTo = `${origin}${targetPath}`
       return NextResponse.redirect(forwardTo)
