@@ -432,12 +432,16 @@ const auditResults = {
     </Link>
     {/* PROFILE DROPDOWN */}
 <div className="group relative py-2"> {/* Added py-2 here to create a bridge */}
-  <div className="w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold cursor-pointer hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100 ring-2 ring-white">
+  <button
+    type="button"
+    aria-label="Open account menu"
+    className="w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold cursor-pointer hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100 ring-2 ring-white"
+  >
     {session.user.email?.[0].toUpperCase()}
-  </div>
+  </button>
 
   {/* Added 'pt-2' to the container and 'top-full' to align it perfectly */}
-  <div className="absolute right-0 top-full w-56 bg-white border border-slate-200 rounded-2xl shadow-xl py-3 hidden group-hover:block animate-in fade-in zoom-in-95 duration-200 z-[100]">
+  <div className="absolute right-0 top-full w-56 bg-white border border-slate-200 rounded-2xl shadow-xl py-3 hidden group-hover:block group-focus-within:block animate-in fade-in zoom-in-95 duration-200 z-[100]">
     {/* This invisible div acts as a physical bridge so the menu doesn't disappear */}
     <div className="absolute -top-2 left-0 right-0 h-2 bg-transparent" />
     

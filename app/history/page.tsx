@@ -194,10 +194,14 @@ export default function HistoryPage() {
               <ShieldCheck className="w-4 h-4" /> Vault
             </div>
             <div className="group relative py-2">
-              <div className="w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold cursor-pointer hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100 ring-2 ring-white">
+              <button
+                type="button"
+                aria-label="Open account menu"
+                className="w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold cursor-pointer hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100 ring-2 ring-white"
+              >
                 {(userEmail[0] || "U").toUpperCase()}
-              </div>
-              <div className="absolute right-0 top-full w-56 bg-white border border-slate-200 rounded-2xl shadow-xl py-3 hidden group-hover:block animate-in fade-in zoom-in-95 duration-200 z-[100]">
+              </button>
+              <div className="absolute right-0 top-full w-56 bg-white border border-slate-200 rounded-2xl shadow-xl py-3 hidden group-hover:block group-focus-within:block animate-in fade-in zoom-in-95 duration-200 z-[100]">
                 <div className="absolute -top-2 left-0 right-0 h-2 bg-transparent" />
                 <div className="px-4 pb-3 mb-2 border-b border-slate-50">
                   <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Active Account</p>
