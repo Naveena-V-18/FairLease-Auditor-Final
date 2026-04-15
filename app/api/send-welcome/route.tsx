@@ -33,6 +33,21 @@ async function readJsonBody(request: Request) {
   }
 }
 
+function resolveBaseUrl(request: Request) {
+  const configuredUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (configuredUrl && /^https?:\/\//i.test(configuredUrl)) {
+    return configuredUrl.replace(/\/$/, '');
+  }
+
+  const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host');
+  const protocol = request.headers.get('x-forwarded-proto') ?? 'https';
+  if (host) {
+    return `${protocol}://${host}`;
+  }
+
+  return 'http://localhost:3000';
+}
+
 export async function POST(request: Request) {
   try {
     const bodyPayload = await readJsonBody(request);
@@ -56,7 +71,7 @@ export async function POST(request: Request) {
 
     // 1. Setup Base URL for the "Start Here" button
     // This dynamically points to your landing page
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const baseUrl = resolveBaseUrl(request);
 
     const { senderEmail, transporter } = createMailTransporter();
 
