@@ -305,7 +305,3 @@ async def upload_lease(file: UploadFile = File(...)):
             "message": f"Server Error: {str(e)}",
             "trace": traceback.format_exc(),
         }
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
