@@ -306,12 +306,19 @@ export default function LeaseAssistant({ auditContext = null, canUseLeaseMode = 
                   event.preventDefault();
                   void submitMessage(inputValue);
                 }}
-                className="flex items-center gap-2"
+                className="flex items-end gap-2"
               >
-                <input
+                <textarea
                   value={inputValue}
                   onChange={(event) => setInputValue(event.target.value)}
-                  className="h-11 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none transition-all focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      void submitMessage(inputValue);
+                    }
+                  }}
+                  rows={1}
+                  className="max-h-36 min-h-11 flex-1 resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none transition-all placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
                   placeholder={isLeaseReady ? "Ask about your lease or negotiation..." : "Ask anything..."}
                 />
                 <button
