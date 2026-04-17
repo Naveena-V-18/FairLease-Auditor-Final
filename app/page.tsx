@@ -14,6 +14,7 @@ import Auth from '@/components/Auth';
 import jsPDF from 'jspdf';
 import { signOutWithRefresh } from '@/lib/signout';
 import ProductStoryCards from '@/components/ProductStoryCards';
+import LeaseAssistant from '@/components/LeaseAssistant';
 
 export default function Home() {
   useEffect(() => {
@@ -792,6 +793,24 @@ const auditResults = {
           </a>
         </div>
       </footer>
+
+      <LeaseAssistant
+        canUseLeaseMode={Boolean(status === 'success' && result)}
+        auditContext={status === 'success' && result ? {
+          score: result.score,
+          verdict: result.verdict,
+          risks: result.risks,
+          summary: result.summary,
+          rule_score: result.rule_score,
+          ai_score: result.ai_score,
+          confidence: result.confidence,
+          confidence_percent: result.confidence_percent,
+          critical_flags: result.critical_flags,
+          rule_breakdown: result.rule_breakdown,
+          structured_fields: result.structured_fields,
+          analysis: result.analysis,
+        } : null}
+      />
     </main>
   );
 }// Force update April 13 
