@@ -60,6 +60,13 @@ Database and Auth
 	- Security alert email
 	- Audit result email with attached PDF report
 
+## Trust Architecture
+
+- Deterministic rule checks validate objective lease items first.
+- AI then performs contextual lease reasoning.
+- Final output blends both signals so the score is explainable and more reliable.
+- The UI shows rule score, AI score, confidence, and the top rule findings.
+
 ## AI Workflow
 
 1. Input: User uploads lease PDF
@@ -138,6 +145,20 @@ For email sending (Vercel environment variables recommended):
 4) Run app
 
 - npm run dev
+
+5) Run locally with the FastAPI backend
+
+- Open Terminal 1:
+	- cd api
+	- python -m uvicorn main:app --reload --port 8000
+- Open Terminal 2 in the project root:
+	- Set `NEXT_PUBLIC_API_URL=http://127.0.0.1:8000` in your shell or `.env.local`
+	- npm run dev
+- Then open `http://localhost:3000`
+
+If you are on PowerShell, set the environment variable with:
+
+- `$env:NEXT_PUBLIC_API_URL = "http://127.0.0.1:8000"`
 
 ## Build and Deploy
 

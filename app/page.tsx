@@ -34,6 +34,7 @@ export default function Home() {
   const [emailToast, setEmailToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '';
 
   const showEmailToast = (type: 'success' | 'error', message: string) => {
     setEmailToast({ type, message });
@@ -159,8 +160,9 @@ const openAuth = (mode: 'login' | 'signup') => {
     formData.append('file', file);
 
     try {
-      console.log("FETCHING FROM:", "/api/upload-lease");
-      const response = await fetch('/api/upload-lease', {
+      const apiUrl = `${apiBaseUrl}/api/upload-lease`;
+      console.log("FETCHING FROM:", apiUrl);
+      const response = await fetch(apiUrl, {
         method: 'POST',
         body: formData,
       });
@@ -193,8 +195,17 @@ const openAuth = (mode: 'login' | 'signup') => {
 
       // Replace everything from setResult down to setStatus('success') with this:
       // Replace your existing mapping with this "Safe Map"
+const finalScore = data.final_score ?? data.score ?? 0;
 const auditResults = {
-  score: data.score || 0,
+  score: finalScore,
+  final_score: finalScore,
+  ai_score: data.ai_score ?? data.score ?? 0,
+  rule_score: data.rule_score ?? null,
+  confidence: data.confidence ?? "medium",
+  confidence_percent: data.confidence_percent ?? null,
+  critical_flags: data.critical_flags ?? [],
+  rule_breakdown: data.rule_breakdown ?? [],
+  structured_fields: data.structured_fields ?? data.summary ?? {},
   verdict: data.verdict || "UNCERTAIN",
   theme: data.theme || "Standard",
   risks: data.risks || [],
@@ -208,7 +219,7 @@ const auditResults = {
       await supabase.from('leases').insert([{ 
         filename: file.name, 
         analysis_text: data.explanation,
-        fairness_score: data.score, 
+        fairness_score: finalScore, 
         user_id: session.user.id
       }]);
 
@@ -654,6 +665,52 @@ const auditResults = {
                       )}
                     </div>
                   </div>
+
+                  {((result.rule_breakdown?.length ?? 0) > 0 || (result.critical_flags?.length ?? 0) > 0) && (
+                    <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm">
+                      <h4 className="text-sm font-bold text-slate-900 mb-5 flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-indigo-600" /> Trust Snapshot
+                      </h4>
+                      <div className="grid grid-cols-3 gap-3 text-center">
+                        <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3">
+                          <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Rule Score</p>
+                          <p className="text-lg font-black text-slate-900 mt-1">{result.rule_score ?? result.score}%</p>
+                        </div>
+                        <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3">
+                          <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">AI Score</p>
+                          <p className="text-lg font-black text-slate-900 mt-1">{result.ai_score ?? result.score}%</p>
+                        </div>
+                        <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3">
+                          <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Confidence</p>
+                          <p className="text-lg font-black text-slate-900 mt-1">{result.confidence_percent ?? result.confidence ?? 'N/A'}</p>
+                        </div>
+                      </div>
+
+                      {(result.critical_flags?.length ?? 0) > 0 && (
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {result.critical_flags.slice(0, 4).map((flag: string, index: number) => (
+                            <span key={index} className="px-3 py-1 rounded-full bg-red-50 text-red-700 border border-red-100 text-[11px] font-bold">
+                              {flag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="mt-4 space-y-3">
+                        {(result.rule_breakdown ?? []).slice(0, 3).map((rule: any, index: number) => (
+                          <div key={index} className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-sm font-bold text-slate-800">{rule.title}</p>
+                              <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${rule.status === 'fail' ? 'bg-red-100 text-red-700' : rule.status === 'warning' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                {rule.status}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-1 leading-relaxed">{rule.reason}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <button onClick={downloadReport} className="w-full bg-white border border-slate-200 p-5 rounded-2xl flex items-center justify-center gap-3 hover:bg-slate-50 transition-all hover:border-slate-300">
                     <Download className="w-4 h-4 text-slate-600"/>
