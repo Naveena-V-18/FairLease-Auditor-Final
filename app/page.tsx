@@ -166,8 +166,17 @@ const openAuth = (mode: 'login' | 'signup') => {
         method: 'POST',
         body: formData,
       });
-      
-      const data = await response.json();
+
+      const rawBody = await response.text();
+      let data: any = null;
+      try {
+        data = rawBody ? JSON.parse(rawBody) : {};
+      } catch {
+        data = {
+          error: `Upload API returned non-JSON response (status ${response.status}).`,
+          message: rawBody?.slice(0, 1000) || "Empty response body",
+        };
+      }
 
       if (!response.ok) {
         setResult({

@@ -8,7 +8,11 @@ from dotenv import load_dotenv
 import pypdf
 from openai import OpenAI
 
-from rule_engine import evaluate_lease_rules
+try:
+    from rule_engine import evaluate_lease_rules
+except ModuleNotFoundError:
+    # Vercel runtime can resolve package imports differently than local runs.
+    from api.rule_engine import evaluate_lease_rules
 
 load_dotenv()
 
