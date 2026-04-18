@@ -29,7 +29,9 @@ type LeaseAssistantProps = {
 
 const quickPrompts = [
   "Explain my score in simple words",
+  "Show evidence for my top risk",
   "Draft a message to negotiate risky clauses",
+  "Simulate if deposit is reduced to two months",
   "What should I fix before signing this lease?",
 ];
 

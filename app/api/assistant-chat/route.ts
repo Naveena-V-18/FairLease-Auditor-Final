@@ -5,6 +5,8 @@ type AssistantMode = 'general' | 'lease';
 type AssistantRequestBody = {
   message?: string;
   mode?: AssistantMode;
+  task?: 'chat' | 'negotiation_draft' | 'what_if_explain';
+  taskPayload?: Record<string, unknown> | null;
   auditContext?: Record<string, unknown> | null;
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
 };
@@ -168,6 +170,8 @@ export async function POST(request: Request) {
     }
 
     const hasAuditContext = Boolean(body.auditContext && typeof body.auditContext === 'object');
+    const task = body.task ?? 'chat';
+    const taskPrompt = buildTaskPrompt(task, body.taskPayload);
     const requestedMode = toAssistantMode(body.mode);
     const effectiveMode = requestedMode === 'lease' || requestedMode === 'general' ? requestedMode : detectMode(message, hasAuditContext);
 
@@ -196,6 +200,14 @@ export async function POST(request: Request) {
         role: 'user',
         content: `Current lease context:\n${contextPayload}`,
       },
+      ...(taskPrompt
+        ? [
+            {
+              role: 'user' as const,
+              content: taskPrompt,
+            },
+          ]
+        : []),
       ...historyMessages,
       {
         role: 'user',
@@ -264,6 +276,7 @@ export async function POST(request: Request) {
       data: normalized,
       provider: 'openrouter',
       mode: effectiveMode,
+      task,
     });
   } catch (error) {
     const message = (error as Error).message;
@@ -280,4 +293,29 @@ export async function POST(request: Request) {
       { status: 200 }
     );
   }
+}
+
+function buildTaskPrompt(task: AssistantRequestBody['task'], taskPayload: AssistantRequestBody['taskPayload']) {
+  if (task === 'negotiation_draft') {
+    const payload = JSON.stringify(taskPayload ?? {}, null, 2).slice(0, 2500);
+    return [
+      'Task: generate tenant negotiation drafts.',
+      'Create one polite WhatsApp style draft and one formal email style draft in answer.',
+      'Reference top risks and propose fair replacement asks.',
+      'Keep language respectful, specific, and practical.',
+      `Task payload:\n${payload}`,
+    ].join('\n');
+  }
+
+  if (task === 'what_if_explain') {
+    const payload = JSON.stringify(taskPayload ?? {}, null, 2).slice(0, 2500);
+    return [
+      'Task: explain what-if lease impact.',
+      'Compare baseline and revised score/verdict and summarize what improved and what still needs negotiation.',
+      'Be concise and action-oriented.',
+      `Task payload:\n${payload}`,
+    ].join('\n');
+  }
+
+  return '';
 }

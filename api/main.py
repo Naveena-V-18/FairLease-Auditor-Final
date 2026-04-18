@@ -119,6 +119,146 @@ def _build_rule_snapshot_markdown(rule_assessment: dict, ai_score: int, final_sc
 
     return "\n".join(lines)
 
+
+def _normalize_confidence(value: str | None):
+    if not value:
+        return "medium"
+    lowered = str(value).strip().lower()
+    if lowered in {"high", "medium", "low"}:
+        return lowered
+    return "medium"
+
+
+def _normalize_status(value: str | None):
+    if not value:
+        return "warning"
+    lowered = str(value).strip().lower()
+    if lowered in {"pass", "warning", "fail"}:
+        return lowered
+    return "warning"
+
+
+def _build_enriched_risks(ai_risks: list, rule_breakdown: list):
+    ai_risks = ai_risks if isinstance(ai_risks, list) else []
+    rules = rule_breakdown if isinstance(rule_breakdown, list) else []
+
+    risky_rules = [
+        rule
+        for rule in rules
+        if _normalize_status(rule.get("status")) in {"fail", "warning"}
+    ]
+
+    enriched = []
+    used_rule_indexes = set()
+
+    for risk in ai_risks:
+        if not isinstance(risk, dict):
+            continue
+
+        issue = str(risk.get("issue", "Lease Risk")).strip() or "Lease Risk"
+        reason = str(risk.get("reason", "Potential lease concern detected.")).strip() or "Potential lease concern detected."
+
+        issue_tokens = set(re.findall(r"[a-z]{4,}", issue.lower()))
+        reason_tokens = set(re.findall(r"[a-z]{4,}", reason.lower()))
+        tokens = issue_tokens.union(reason_tokens)
+
+        matched_rule_index = None
+        for idx, rule in enumerate(risky_rules):
+            hay = " ".join([
+                str(rule.get("title", "")),
+                str(rule.get("reason", "")),
+                str(rule.get("evidence", "")),
+            ]).lower()
+            if tokens and any(token in hay for token in tokens):
+                matched_rule_index = idx
+                break
+
+        if matched_rule_index is None and risky_rules:
+            for idx, _ in enumerate(risky_rules):
+                if idx not in used_rule_indexes:
+                    matched_rule_index = idx
+                    break
+            if matched_rule_index is None:
+                matched_rule_index = 0
+
+        linked_rule = risky_rules[matched_rule_index] if matched_rule_index is not None and risky_rules else None
+        if matched_rule_index is not None:
+            used_rule_indexes.add(matched_rule_index)
+
+        evidence_text = str(linked_rule.get("evidence", "")).strip() if linked_rule else ""
+        if not evidence_text:
+            evidence_text = str(risk.get("evidence", "")).strip()
+
+        confidence = _normalize_confidence(
+            str(risk.get("confidence", "")).strip() or (linked_rule.get("confidence") if linked_rule else "")
+        )
+        risk_status = _normalize_status(linked_rule.get("status") if linked_rule else "warning")
+        score_impact = _safe_int(linked_rule.get("score_impact", 8) if linked_rule else 8, 8)
+
+        enriched.append(
+            {
+                "issue": issue,
+                "reason": reason,
+                "evidence_text": evidence_text,
+                "confidence": confidence,
+                "severity": risk_status,
+                "score_impact": score_impact,
+                "rule_id": str(linked_rule.get("rule_id", "")).strip() if linked_rule else "",
+            }
+        )
+
+    if not enriched:
+        for rule in risky_rules[:5]:
+            enriched.append(
+                {
+                    "issue": str(rule.get("title", "Lease Risk")),
+                    "reason": str(rule.get("reason", "Potential lease concern detected.")),
+                    "evidence_text": str(rule.get("evidence", "")),
+                    "confidence": _normalize_confidence(rule.get("confidence")),
+                    "severity": _normalize_status(rule.get("status")),
+                    "score_impact": _safe_int(rule.get("score_impact", 8), 8),
+                    "rule_id": str(rule.get("rule_id", "")).strip(),
+                }
+            )
+
+    return enriched
+
+
+def _build_risk_priorities(enriched_risks: list):
+    immediate = []
+    important = []
+    optional = []
+
+    for risk in enriched_risks if isinstance(enriched_risks, list) else []:
+        if not isinstance(risk, dict):
+            continue
+
+        issue = str(risk.get("issue", "Lease Risk")).strip() or "Lease Risk"
+        reason = str(risk.get("reason", "Potential concern")).strip() or "Potential concern"
+        score_impact = _safe_int(risk.get("score_impact", 8), 8)
+        severity = _normalize_status(risk.get("severity"))
+        confidence = _normalize_confidence(risk.get("confidence"))
+
+        item = {
+            "issue": issue,
+            "why_now": reason,
+            "score_impact": score_impact,
+            "confidence": confidence,
+        }
+
+        if severity == "fail" or score_impact >= 14:
+            immediate.append(item)
+        elif severity == "warning" or score_impact >= 8:
+            important.append(item)
+        else:
+            optional.append(item)
+
+    return {
+        "immediate": immediate[:3],
+        "important": important[:3],
+        "optional": optional[:3],
+    }
+
 # ==========================================
 # ⚖️ TIER 2 & 3: AI CLASSIFICATION & AUDIT
 # ==========================================
@@ -175,7 +315,7 @@ def run_ats_logic_with_failover(text):
             "score": 0-100,
             "verdict": "SAFE | MEDIUM RISK | HIGH RISK",
             "color": "hex_code",
-            "risks": [ {{ "issue": "string", "reason": "string" }} ]
+            "risks": [ {{ "issue": "string", "reason": "string", "evidence": "string", "confidence": "high|medium|low" }} ]
         }},
         "explanation": "MARKDOWN_REPORT"
     }}
@@ -276,6 +416,8 @@ async def upload_lease(file: UploadFile = File(...)):
         final_score = round((rule_score * 0.7) + (ai_score * 0.3))
         final_verdict = _score_to_verdict(final_score, rule_assessment.get("critical_flags", []))
         snapshot_markdown = _build_rule_snapshot_markdown(rule_assessment, ai_score, final_score)
+        enriched_risks = _build_enriched_risks(audit_data.get("risks", []), rule_assessment.get("rule_breakdown", []))
+        risk_priorities = _build_risk_priorities(enriched_risks)
         explanation = result_data.get("explanation", "")
         if explanation:
             explanation = f"{explanation}\n\n{snapshot_markdown}"
@@ -297,6 +439,8 @@ async def upload_lease(file: UploadFile = File(...)):
             "verdict": final_verdict,
             "theme": audit_data.get("color", "#4CAF50"),
             "risks": audit_data.get("risks", []),
+            "enriched_risks": enriched_risks,
+            "risk_priorities": risk_priorities,
             "summary": result_data.get("extracted_data", {}),
             "structured_fields": rule_assessment.get("structured_fields", {}),
             "explanation": explanation

@@ -36,6 +36,11 @@ export default function Home() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '';
+  const [negotiationDraft, setNegotiationDraft] = useState<string | null>(null);
+  const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
+  const [whatIfInput, setWhatIfInput] = useState({ deposit: '', noticePeriod: '', lockInMonths: '' });
+  const [whatIfResult, setWhatIfResult] = useState<null | { score: number; verdict: string; explanation: string }>(null);
+  const [isSimulating, setIsSimulating] = useState(false);
 
   const showEmailToast = (type: 'success' | 'error', message: string) => {
     setEmailToast({ type, message });
@@ -161,6 +166,8 @@ const openAuth = (mode: 'login' | 'signup') => {
     formData.append('file', file);
 
     try {
+      setNegotiationDraft(null);
+      setWhatIfResult(null);
       const apiUrl = `${apiBaseUrl}/api/upload-lease`;
       console.log("FETCHING FROM:", apiUrl);
       const response = await fetch(apiUrl, {
@@ -215,6 +222,8 @@ const auditResults = {
   confidence_percent: data.confidence_percent ?? null,
   critical_flags: data.critical_flags ?? [],
   rule_breakdown: data.rule_breakdown ?? [],
+  enriched_risks: data.enriched_risks ?? data.risks ?? [],
+  risk_priorities: data.risk_priorities ?? { immediate: [], important: [], optional: [] },
   structured_fields: data.structured_fields ?? data.summary ?? {},
   verdict: data.verdict || "UNCERTAIN",
   theme: data.theme || "Standard",
@@ -254,6 +263,117 @@ const auditResults = {
     if (isSigningOut) return;
     setIsSigningOut(true);
     await signOutWithRefresh('/');
+  };
+
+  const generateNegotiationDraft = async () => {
+    if (!result || isGeneratingDraft) return;
+    setIsGeneratingDraft(true);
+
+    try {
+      const response = await fetch('/api/assistant-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'lease',
+          task: 'negotiation_draft',
+          message: 'Generate negotiation drafts based on this audit.',
+          auditContext: {
+            score: result.score,
+            verdict: result.verdict,
+            critical_flags: result.critical_flags,
+            enriched_risks: result.enriched_risks,
+            risk_priorities: result.risk_priorities,
+          },
+          taskPayload: {
+            topRisks: (result.enriched_risks ?? []).slice(0, 4),
+            priorities: result.risk_priorities ?? {},
+          },
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      const draftText = payload?.data?.answer;
+      if (!response.ok || typeof draftText !== 'string' || draftText.trim().length === 0) {
+        setNegotiationDraft('Unable to generate a negotiation draft right now. Please try again.');
+        return;
+      }
+
+      setNegotiationDraft(draftText);
+    } catch {
+      setNegotiationDraft('Network issue while generating draft. Please retry.');
+    } finally {
+      setIsGeneratingDraft(false);
+    }
+  };
+
+  const runWhatIfSimulation = async () => {
+    if (!result || isSimulating) return;
+    setIsSimulating(true);
+
+    const baselineScore = Number(result.score ?? 0);
+    const baselineVerdict = String(result.verdict ?? 'UNKNOWN');
+
+    const deposit = Number(whatIfInput.deposit || result.summary?.deposit || 0);
+    const rent = Number(result.summary?.rent || 0);
+    const lockInMonths = Number(whatIfInput.lockInMonths || 0);
+    const noticePeriod = Number(whatIfInput.noticePeriod || 0);
+
+    let estimatedScore = baselineScore;
+
+    if (rent > 0 && deposit > 0) {
+      const ratio = deposit / rent;
+      if (ratio <= 2) estimatedScore += 8;
+      else if (ratio <= 3) estimatedScore += 2;
+      else if (ratio > 3) estimatedScore -= 10;
+    }
+
+    if (lockInMonths > 0) {
+      if (lockInMonths <= 6) estimatedScore += 6;
+      else if (lockInMonths > 12) estimatedScore -= 8;
+    }
+
+    if (noticePeriod > 0) {
+      if (noticePeriod >= 30 && noticePeriod <= 60) estimatedScore += 4;
+      else if (noticePeriod > 90) estimatedScore -= 6;
+    }
+
+    estimatedScore = Math.max(0, Math.min(100, Math.round(estimatedScore)));
+    const estimatedVerdict = estimatedScore >= 75 ? 'SAFE' : estimatedScore >= 50 ? 'MEDIUM RISK' : 'HIGH RISK';
+
+    let explanation = `Baseline ${baselineScore}% (${baselineVerdict}) -> Simulated ${estimatedScore}% (${estimatedVerdict}).`;
+
+    try {
+      const response = await fetch('/api/assistant-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'lease',
+          task: 'what_if_explain',
+          message: 'Explain this what-if lease impact clearly.',
+          auditContext: {
+            baselineScore,
+            baselineVerdict,
+            simulatedScore: estimatedScore,
+            simulatedVerdict: estimatedVerdict,
+          },
+          taskPayload: {
+            baseline: { score: baselineScore, verdict: baselineVerdict },
+            revised: { score: estimatedScore, verdict: estimatedVerdict, deposit, lockInMonths, noticePeriod },
+          },
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      const text = payload?.data?.answer;
+      if (response.ok && typeof text === 'string' && text.trim().length > 0) {
+        explanation = text;
+      }
+    } catch {
+      // Keep deterministic explanation if assistant call fails.
+    } finally {
+      setWhatIfResult({ score: estimatedScore, verdict: estimatedVerdict, explanation });
+      setIsSimulating(false);
+    }
   };
 
   const downloadReport = () => {
@@ -662,12 +782,22 @@ const auditResults = {
                       <AlertCircle className="w-4 h-4 text-red-500" /> Identified Constraints
                     </h4>
                     <div className="space-y-5">
-                      {result.risks?.length > 0 ? result.risks.map((risk: any, i: number) => (
+                      {(result.enriched_risks ?? result.risks)?.length > 0 ? (result.enriched_risks ?? result.risks).map((risk: any, i: number) => (
                         <div key={i} className="flex gap-4 p-3 rounded-xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100 group">
                           <div className="mt-1 w-1 h-1 rounded-full bg-red-400 shrink-0 group-hover:scale-150 transition-transform" />
                           <div>
                             <p className="text-xs font-bold text-slate-800 leading-tight">{risk.issue}</p>
                             <p className="text-[11px] text-slate-500 leading-normal mt-1">{risk.reason}</p>
+                            {risk.evidence_text && (
+                              <p className="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-100 mt-2 px-2 py-1 rounded-lg">
+                                Evidence: {risk.evidence_text}
+                              </p>
+                            )}
+                            {(risk.confidence || risk.rule_id) && (
+                              <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-bold">
+                                {risk.confidence ? `Confidence: ${risk.confidence}` : ''} {risk.rule_id ? ` ${risk.rule_id}` : ''}
+                              </p>
+                            )}
                           </div>
                         </div>
                       )) : (
@@ -722,6 +852,73 @@ const auditResults = {
                     </div>
                   )}
 
+                  <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm">
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                      <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <Gavel className="w-4 h-4 text-indigo-600" /> Negotiation Draft Generator
+                      </h4>
+                      <button
+                        onClick={generateNegotiationDraft}
+                        disabled={isGeneratingDraft}
+                        className="text-xs font-bold bg-slate-900 text-white px-3 py-2 rounded-lg hover:bg-indigo-600 transition-all disabled:opacity-60"
+                      >
+                        {isGeneratingDraft ? 'Generating...' : 'Generate Draft'}
+                      </button>
+                    </div>
+                    {negotiationDraft ? (
+                      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-xs text-slate-700 whitespace-pre-wrap">
+                        {negotiationDraft}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500">Generate a ready-to-send negotiation draft based on top risks and priorities.</p>
+                    )}
+                  </div>
+
+                  <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm">
+                    <h4 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+                      <Scale className="w-4 h-4 text-indigo-600" /> What-If Simulator
+                    </h4>
+                    <div className="grid grid-cols-1 gap-3">
+                      <input
+                        type="number"
+                        value={whatIfInput.deposit}
+                        onChange={(event) => setWhatIfInput((prev) => ({ ...prev, deposit: event.target.value }))}
+                        placeholder="Revised security deposit"
+                        className="h-10 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:ring-2 focus:ring-indigo-100"
+                      />
+                      <input
+                        type="number"
+                        value={whatIfInput.noticePeriod}
+                        onChange={(event) => setWhatIfInput((prev) => ({ ...prev, noticePeriod: event.target.value }))}
+                        placeholder="Revised notice period (days)"
+                        className="h-10 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:ring-2 focus:ring-indigo-100"
+                      />
+                      <input
+                        type="number"
+                        value={whatIfInput.lockInMonths}
+                        onChange={(event) => setWhatIfInput((prev) => ({ ...prev, lockInMonths: event.target.value }))}
+                        placeholder="Revised lock-in (months)"
+                        className="h-10 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:ring-2 focus:ring-indigo-100"
+                      />
+                      <button
+                        onClick={runWhatIfSimulation}
+                        disabled={isSimulating}
+                        className="h-10 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-all disabled:opacity-60"
+                      >
+                        {isSimulating ? 'Simulating...' : 'Run Simulation'}
+                      </button>
+                    </div>
+
+                    {whatIfResult && (
+                      <div className="mt-4 rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
+                        <p className="text-xs font-black uppercase tracking-widest text-indigo-600">Simulated Result</p>
+                        <p className="text-xl font-black text-slate-900 mt-1">{whatIfResult.score}%</p>
+                        <p className="text-xs font-bold text-slate-600 mt-1">Verdict: {whatIfResult.verdict}</p>
+                        <p className="text-xs text-slate-600 mt-3 leading-relaxed">{whatIfResult.explanation}</p>
+                      </div>
+                    )}
+                  </div>
+
                   <button onClick={downloadReport} className="w-full bg-white border border-slate-200 p-5 rounded-2xl flex items-center justify-center gap-3 hover:bg-slate-50 transition-all hover:border-slate-300">
                     <Download className="w-4 h-4 text-slate-600"/>
                     <span className="text-sm font-bold text-slate-700">Download Formal Audit PDF</span>
@@ -743,6 +940,44 @@ const auditResults = {
                         prose-blockquote:border-l-2 prose-blockquote:border-indigo-500 prose-blockquote:bg-indigo-50/50 prose-blockquote:py-1 prose-blockquote:px-6 prose-blockquote:rounded-r-xl">
                       <ReactMarkdown>{result.analysis}</ReactMarkdown>
                     </div>
+
+                    {(result.risk_priorities?.immediate?.length || result.risk_priorities?.important?.length || result.risk_priorities?.optional?.length) ? (
+                      <div className="px-10 pb-10">
+                        <div className="rounded-3xl border border-slate-200 bg-white p-6">
+                          <h4 className="text-sm font-black text-slate-900 mb-4 tracking-wide">Fix First Priority Engine</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {[{
+                              key: 'immediate',
+                              title: 'Immediate',
+                              tone: 'bg-red-50 border-red-100 text-red-700',
+                            }, {
+                              key: 'important',
+                              title: 'Important',
+                              tone: 'bg-amber-50 border-amber-100 text-amber-700',
+                            }, {
+                              key: 'optional',
+                              title: 'Optional',
+                              tone: 'bg-emerald-50 border-emerald-100 text-emerald-700',
+                            }].map((bucket: any) => (
+                              <div key={bucket.key} className={`rounded-2xl border p-4 ${bucket.tone}`}>
+                                <p className="text-[11px] font-black uppercase tracking-[0.2em]">{bucket.title}</p>
+                                <div className="mt-3 space-y-2 text-xs">
+                                  {(result.risk_priorities?.[bucket.key] ?? []).slice(0, 2).map((item: any, idx: number) => (
+                                    <div key={idx} className="bg-white/70 rounded-lg p-2 border border-white/80">
+                                      <p className="font-bold leading-tight">{item.issue}</p>
+                                      <p className="text-[11px] mt-1 leading-relaxed">{item.why_now}</p>
+                                    </div>
+                                  ))}
+                                  {(result.risk_priorities?.[bucket.key] ?? []).length === 0 && (
+                                    <p className="text-[11px] opacity-70">No items in this bucket.</p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
                     
                     <div className="mt-auto p-10 bg-slate-50 border-t border-slate-100">
                       <div className="flex items-start gap-4">
