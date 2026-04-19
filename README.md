@@ -23,7 +23,7 @@ It also includes a floating assistant, audit history, downloadable reports, and 
 - Live app: https://fair-lease-auditor-final.vercel.app
 - GitHub: https://github.com/Naveena-V-18/FairLease-Auditor-Final
 - Demo video: https://drive.google.com/drive/folders/1LltORUk1TXroGlGK-nnkuBa7lSKBK-g1
-- Poster: https://drive.google.com/file/d/1QhJqQb6Okhdj2gFThlOF6nsnCJSLd64K/view
+- Poster: https://drive.google.com/drive/folders/1tRusRM2UZ2RywCvi-VfiLpwrFnFtXF47?usp=sharing
 - Documentation: https://drive.google.com/drive/folders/1EimOQx6CHBY3RRFiq9Ge74h5TiJz7dWI?usp=sharing
 
 ## Key Features
