@@ -224,6 +224,7 @@ const auditResults = {
   rule_breakdown: data.rule_breakdown ?? [],
   enriched_risks: data.enriched_risks ?? data.risks ?? [],
   risk_priorities: data.risk_priorities ?? { immediate: [], important: [], optional: [] },
+  clause_conflicts: data.clause_conflicts ?? [],
   structured_fields: data.structured_fields ?? data.summary ?? {},
   verdict: data.verdict || "UNCERTAIN",
   theme: data.theme || "Standard",
@@ -283,6 +284,7 @@ const auditResults = {
             critical_flags: result.critical_flags,
             enriched_risks: result.enriched_risks,
             risk_priorities: result.risk_priorities,
+            clause_conflicts: result.clause_conflicts,
           },
           taskPayload: {
             topRisks: (result.enriched_risks ?? []).slice(0, 4),
@@ -846,6 +848,32 @@ const auditResults = {
                               </span>
                             </div>
                             <p className="text-xs text-slate-500 mt-1 leading-relaxed">{rule.reason}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(result.clause_conflicts?.length ?? 0) > 0 && (
+                    <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm">
+                      <h4 className="text-sm font-bold text-slate-900 mb-5 flex items-center gap-2">
+                        <FileCheck className="w-4 h-4 text-indigo-600" /> Document Consistency Check
+                      </h4>
+                      <div className="space-y-3">
+                        {(result.clause_conflicts ?? []).map((item: any, index: number) => (
+                          <div key={index} className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs font-black text-slate-900 uppercase tracking-wide">{item.title}</p>
+                              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full bg-white text-amber-700 border border-amber-200">
+                                {item.confidence ?? 'medium'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-700 mt-2 leading-relaxed">{item.details}</p>
+                            {item.evidence_text && (
+                              <p className="text-[11px] text-slate-600 mt-3 bg-white rounded-lg border border-amber-100 px-3 py-2">
+                                Evidence: {item.evidence_text}
+                              </p>
+                            )}
                           </div>
                         ))}
                       </div>

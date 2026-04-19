@@ -259,6 +259,86 @@ def _build_risk_priorities(enriched_risks: list):
         "optional": optional[:3],
     }
 
+
+def _detect_clause_conflicts(text: str, extracted_data: dict, enriched_risks: list):
+    lower_text = text.lower()
+    conflicts = []
+
+    def add_conflict(title: str, details: str, evidence_terms: list[str], confidence: str = "medium"):
+        evidence = ""
+        for term in evidence_terms:
+            idx = lower_text.find(term)
+            if idx >= 0:
+                start = max(0, idx - 80)
+                end = min(len(text), idx + len(term) + 80)
+                evidence = text[start:end].strip()
+                break
+
+        conflicts.append(
+            {
+                "title": title,
+                "details": details,
+                "evidence_text": evidence,
+                "confidence": confidence,
+            }
+        )
+
+    has_non_refundable = "non-refundable" in lower_text or "not refundable" in lower_text
+    has_refund = "refund" in lower_text or "refundable" in lower_text
+    if has_non_refundable and has_refund:
+        add_conflict(
+            "Deposit Refund Contradiction",
+            "The lease text includes both refundable and non-refundable deposit language, which can create disputes.",
+            ["non-refundable", "refund", "refundable"],
+            "high",
+        )
+
+    has_notice_required = "notice" in lower_text and ("days" in lower_text or "month" in lower_text)
+    has_immediate_termination = "immediate termination" in lower_text or "without notice" in lower_text
+    if has_notice_required and has_immediate_termination:
+        add_conflict(
+            "Termination Path Conflict",
+            "The lease contains both notice-period requirements and immediate termination language.",
+            ["notice", "immediate termination", "without notice"],
+            "high",
+        )
+
+    has_entry_with_notice = "prior notice" in lower_text or "with notice" in lower_text
+    has_entry_without_notice = "without notice" in lower_text and ("entry" in lower_text or "access" in lower_text)
+    if has_entry_with_notice and has_entry_without_notice:
+        add_conflict(
+            "Privacy Entry Conflict",
+            "Landlord entry appears to be described both with and without notice conditions.",
+            ["entry", "access", "without notice", "prior notice"],
+            "medium",
+        )
+
+    deposit_candidates = re.findall(r"deposit\s*[:=]?\s*(?:rs\.?\s*)?([0-9][0-9,]*(?:\.[0-9]+)?)", lower_text)
+    normalized = {re.sub(r"[^0-9.]", "", value) for value in deposit_candidates}
+    normalized = {value for value in normalized if value}
+    if len(normalized) >= 2:
+        add_conflict(
+            "Deposit Amount Inconsistency",
+            "Multiple different deposit values were detected in the lease text.",
+            ["deposit"],
+            "medium",
+        )
+
+    if not conflicts:
+        high_risks = [risk for risk in (enriched_risks or []) if _normalize_status(risk.get("severity")) == "fail"]
+        if len(high_risks) >= 2:
+            titles = ", ".join(str(item.get("issue", "Risk")) for item in high_risks[:2])
+            conflicts.append(
+                {
+                    "title": "High-Risk Clause Stack",
+                    "details": f"Multiple high-risk clauses may overlap and create combined liability: {titles}.",
+                    "evidence_text": "",
+                    "confidence": "medium",
+                }
+            )
+
+    return conflicts[:4]
+
 # ==========================================
 # ⚖️ TIER 2 & 3: AI CLASSIFICATION & AUDIT
 # ==========================================
@@ -418,6 +498,7 @@ async def upload_lease(file: UploadFile = File(...)):
         snapshot_markdown = _build_rule_snapshot_markdown(rule_assessment, ai_score, final_score)
         enriched_risks = _build_enriched_risks(audit_data.get("risks", []), rule_assessment.get("rule_breakdown", []))
         risk_priorities = _build_risk_priorities(enriched_risks)
+        clause_conflicts = _detect_clause_conflicts(text, result_data.get("extracted_data", {}), enriched_risks)
         explanation = result_data.get("explanation", "")
         if explanation:
             explanation = f"{explanation}\n\n{snapshot_markdown}"
@@ -441,6 +522,7 @@ async def upload_lease(file: UploadFile = File(...)):
             "risks": audit_data.get("risks", []),
             "enriched_risks": enriched_risks,
             "risk_priorities": risk_priorities,
+            "clause_conflicts": clause_conflicts,
             "summary": result_data.get("extracted_data", {}),
             "structured_fields": rule_assessment.get("structured_fields", {}),
             "explanation": explanation
